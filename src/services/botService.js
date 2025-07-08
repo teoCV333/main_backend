@@ -36,6 +36,7 @@ export const sendTelegramAlert = async ({ groupId, text }) => {
   });
 
   const result = await response.json();
+  console.log(result)
   return result.result.message_id;
 }
 
