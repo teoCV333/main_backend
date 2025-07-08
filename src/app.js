@@ -7,7 +7,7 @@ import cors from 'cors';
 const app = express();
 
 app.use(cors({
-    origin: 'https://eliminacuotaonline.lat ', // tu frontend
+    origin: 'https://eliminacuotaonline.lat', // tu frontend
     methods: ['GET', 'POST'],
     credentials: true
 }));
