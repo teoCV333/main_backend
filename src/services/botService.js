@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 const pendingDecisions = new Map();
 
 export function waitForDecision(decisionId) {
