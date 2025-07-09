@@ -46,7 +46,7 @@ export const sendTelegramAlert = async ({ groupId, text, decisionId }) => {
 
 export async function respondToTelegramCallback(callback) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const [decision, decisionId] = callback.data.split(':');
+  const [decision, decisionId] = callback.data.split(":");
 
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'POST',
