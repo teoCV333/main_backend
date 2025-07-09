@@ -1,10 +1,11 @@
-const pendingDecisions = new Map(); // decisionId -> { resolve, reject }
+import fetch from 'node-fetch';
+
+const pendingDecisions = new Map();
 
 export function waitForDecision(decisionId) {
   return new Promise((resolve, reject) => {
     pendingDecisions.set(decisionId, { resolve, reject });
 
-    // Timeout opcional para evitar promesas eternas
     setTimeout(() => {
       if (pendingDecisions.has(decisionId)) {
         pendingDecisions.delete(decisionId);
@@ -34,24 +35,21 @@ export const sendTelegramAlert = async ({ groupId, text, decisionId }) => {
   });
 
   const result = await response.json();
-
   if (!result.ok) {
-    console.error('Error enviando mensaje a Telegram:', result);
-    return { message_id: null, decisionId };
+    console.error('Telegram error:', result);
+    return { message_id: null };
   }
 
   return {
     message_id: result.result.message_id,
-    decisionId,
+    decisionId
   };
 };
 
 export async function respondToTelegramCallback(callback) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-
   const [decision, decisionId] = callback.data.split(':');
 
-  // Confirmar al usuario su decisión (cierra la animación de espera en Telegram)
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -62,17 +60,13 @@ export async function respondToTelegramCallback(callback) {
     }),
   });
 
-  // Resolver la decisión pendiente si existe
   if (pendingDecisions.has(decisionId)) {
     const { resolve } = pendingDecisions.get(decisionId);
     resolve(decision);
     pendingDecisions.delete(decisionId);
-  } else {
-    console.warn(`No hay decisión pendiente para decisionId: ${decisionId}`);
   }
 }
 
-// Enviar mensaje sin botones
 export const sendSimpleTelegramMessage = async (chatId, text) => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -95,7 +89,9 @@ export const editTelegramMessage = async ({ chatId, messageId, text, reply_marku
     parse_mode: 'HTML',
   };
 
-  if (reply_markup) payload.reply_markup = reply_markup;
+  if (reply_markup) {
+    payload.reply_markup = reply_markup;
+  }
 
   const response = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
     method: 'POST',
