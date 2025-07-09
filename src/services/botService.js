@@ -16,7 +16,7 @@ export function waitForDecision(decisionId) {
 export const sendTelegramAlert = async ({ groupId, text, decisionId }) => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const telegramApi = `https://api.telegram.org/bot${token}/sendMessage`;
-
+  console.log(groupId)
   const response = await fetch(telegramApi, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
