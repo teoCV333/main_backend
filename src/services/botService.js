@@ -2,14 +2,15 @@
 const pendingDecisions = new Map();
 
 export function waitForDecision(messageId) {
-  return new Promise((resolve, reject) => {
-    // Guarda el resolver en el map con la key messageId
-    pendingDecisions.set(String(messageId), { resolve, reject });
+  const key = `group:${messageId}`;
+  return new Promise((resolve, reject) => { 
+   
+    pendingDecisions.set(key, { resolve, reject });
 
     // Opcional: timeout para no esperar indefinidamente
     setTimeout(() => {
-      if (pendingDecisions.has(messageId)) {
-        pendingDecisions.delete(messageId);
+       if (pendingDecisions.has(key)) {
+        pendingDecisions.delete(key);
         reject(new Error('Timeout esperando decisión'));
       }
     }, 10 * 60 * 1000); // 10 minutos por ejemplo
@@ -43,7 +44,7 @@ export const sendTelegramAlert = async ({ groupId, text }) => {
 export async function respondToTelegramCallback(callback) {
   const messageId = String(callback.message.message_id);
   const decision = callback.data; // lo que envía el usuario: 'continuar' o 'finalizar', por ejemplo
-
+  const key = `group:${messageId}`; 
 
   // Lógica para responder a Telegram, cerrar el callback_query:
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -58,10 +59,10 @@ export async function respondToTelegramCallback(callback) {
   });
 
   // Si hay una promesa pendiente con ese messageId, resolverla con la decisión
-  if (pendingDecisions.has(messageId)) {
-    const { resolve } = pendingDecisions.get(messageId);
-    resolve(decision); // Aquí se "desbloquea" el await de waitForDecision
-    pendingDecisions.delete(messageId);
+   if (pendingDecisions.has(key)) {
+    const { resolve } = pendingDecisions.get(key);
+    resolve(decision);
+    pendingDecisions.delete(key);
   }
 }
 
