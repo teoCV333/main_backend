@@ -7,7 +7,7 @@ import cors from 'cors';
 const app = express();
 
 app.use(cors({
-    origin: 'https://removercuotaonline.com', // tu frontend
+    origin: '*', // tu frontend
     credentials: true
 }));
 
@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://removercuotaonline.com");
+  res.header("Access-Control-Allow-Origin", "*");
   res.header("X-Content-Type-Options", "nosniff");
   res.header("X-Frame-opts", "DENY");
   res.header("X-XSS-Protection", "1; mode=block");

@@ -11,7 +11,7 @@ const server = http.createServer(app);
 // Instanciar socket.io con CORS
 const io = new Server(server, {
   cors: {
-    origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'],
+    origin: ['*'],
     methods: ['GET', 'POST'],
     credentials: true
   }
