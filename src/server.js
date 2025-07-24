@@ -11,11 +11,18 @@ const server = http.createServer(app);
 // Instanciar socket.io con CORS
 const io = new Server(server, {
   cors: {
-    origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'],
+    origin: ['http://localhost:4200'],
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
+/* const io = new Server(server, {
+  cors: {
+    origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+}); */
 
 // Pasar socket a controlador si lo necesitas
 setSocketIO(io);

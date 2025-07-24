@@ -6,8 +6,12 @@ import cors from 'cors';
 
 const app = express();
 
-app.use(cors({
+/* app.use(cors({
     origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'], // tu frontend
+    credentials: true
+})); */
+app.use(cors({
+    origin: ['http://localhost:4200',], // tu frontend
     credentials: true
 }));
 
@@ -28,7 +32,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Origin", "http://localhost:4200");
   res.header("X-Content-Type-Options", "nosniff");
   res.header("X-Frame-opts", "DENY");
   res.header("X-XSS-Protection", "1; mode=block");
