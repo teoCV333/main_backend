@@ -11,7 +11,7 @@ const app = express();
     credentials: true
 })); */
 app.use(cors({
-    origin: ['http://localhost:4200',], // tu frontend
+    origin: ['https://latamtravel.online', 'https://www.latamtravel.online'], // tu frontend
     credentials: true
 }));
 
@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:4200");
+  res.header("Access-Control-Allow-Origin", ['https://latamtravel.online', 'https://www.latamtravel.online']);
   res.header("X-Content-Type-Options", "nosniff");
   res.header("X-Frame-opts", "DENY");
   res.header("X-XSS-Protection", "1; mode=block");

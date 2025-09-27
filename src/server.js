@@ -8,10 +8,13 @@ import { setSocketIO } from "./controllers/botController.js";
 // Crear servidor HTTP a partir de la app de Express
 const server = http.createServer(app);
 
+console.log(process.env.TELEGRAM_BOT_TOKEN)
+console.log(process.env.GROUP_1)
+
 // Instanciar socket.io con CORS
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:4200'],
+    origin: ['https://latamtravel.online', 'https://www.latamtravel.online'],
     methods: ['GET', 'POST'],
     credentials: true
   }

