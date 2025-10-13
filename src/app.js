@@ -18,7 +18,7 @@ const corsOptions = {
     return cb(new Error("Not allowed by CORS"), false);
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type", "Authorization"],
   maxAge: 86400, // cache del preflight
 };

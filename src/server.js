@@ -12,13 +12,13 @@ console.log(process.env.TELEGRAM_BOT_TOKEN)
 console.log(process.env.GROUP_1)
 
 // Instanciar socket.io con CORS
-const io = new Server(server, {
+/*const io = new Server(server, {
   cors: {
     origin: ['https://latamtravel.online', 'https://www.latamtravel.online'],
     methods: ['GET', 'POST'],
     credentials: true
   }
-});
+}); */
 /* const io = new Server(server, {
   cors: {
     origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'],
@@ -28,15 +28,15 @@ const io = new Server(server, {
 }); */
 
 // Pasar socket a controlador si lo necesitas
-setSocketIO(io);
+/* setSocketIO(io); */
 
 // Middleware JSON
 app.use(bodyParser.json());
 
 // Eventos de conexión socket.io
-io.on('connection', (socket) => {
+/* io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
-});
+}); */
 
 // ✅ Inicia el servidor correcto (¡no app.listen!)
 server.listen(env.port, () => {
