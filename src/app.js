@@ -19,7 +19,7 @@ const botUserAgents = [
   /bot/i, /crawl/i, /slurp/i, /spider/i, /Yandex/i, /Bingbot/i, /Googlebot/i
 ];
 
-app.use((req, res, next) => {
+/* app.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
   const isBot = botUserAgents.some(pattern => pattern.test(userAgent));
 
@@ -29,7 +29,7 @@ app.use((req, res, next) => {
   }
 
   next();
-});
+}); */
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", ['https://latamtravel.online', 'https://www.latamtravel.online']);
