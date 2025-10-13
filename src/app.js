@@ -35,12 +35,9 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
 
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-app.use(json({ limit: "25mb" }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
-app.set("trust proxy", true);
-
-app.get("/api/healthz", (req, res) => res.status(200).json({ ok: true }));
 
 /* app.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
