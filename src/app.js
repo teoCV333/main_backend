@@ -4,20 +4,43 @@ import path  from "path";
 import routes from "./routes/index.js";
 import cors from 'cors';
 
+const ALLOWED_ORIGINS = [
+  "https://latamtravel.online",
+  "https://www.latamtravel.online",
+];
+
+// --- 2) CORS robusto (maneja preflight correctamente)
+const corsOptions = {
+  origin(origin, cb) {
+    // Permitir herramientas locales/healthchecks sin Origin
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error("Not allowed by CORS"), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  maxAge: 86400, // cache del preflight
+};
+
+
 const app = express();
 
 /* app.use(cors({
     origin: ['https://removercuotaonline.com', 'https://www.removercuotaonline.com'], // tu frontend
     credentials: true
 })); */
-app.use(cors({
-    origin: ['https://latamtravel.online', 'https://www.latamtravel.online'], // tu frontend
-    credentials: true
-}));
+app.use(cors(corsOptions));
 
-const botUserAgents = [
-  /bot/i, /crawl/i, /slurp/i, /spider/i, /Yandex/i, /Bingbot/i, /Googlebot/i
-];
+app.options("*", cors(corsOptions));
+
+
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+app.use(json({ limit: "25mb" }));
+
+app.set("trust proxy", true);
+
+app.get("/api/healthz", (req, res) => res.status(200).json({ ok: true }));
 
 /* app.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
@@ -32,10 +55,10 @@ const botUserAgents = [
 }); */
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", ['https://latamtravel.online', 'https://www.latamtravel.online']);
-  res.header("X-Content-Type-Options", "nosniff");
-  res.header("X-Frame-opts", "DENY");
-  res.header("X-XSS-Protection", "1; mode=block");
+  // Express + cors ya setea Access-Control-Allow-Origin correctamente (uno solo).
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");          // <-- nombre correcto
+  res.setHeader("X-XSS-Protection", "1; mode=block");
   next();
 });
 
@@ -45,5 +68,11 @@ app.use(json());
 
 // Routes
 app.use("/api", routes);
+
+app.use((err, req, res, next) => {
+  console.error("Error middleware:", err?.stack || err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: "Internal Server Error" });
+});
 
 export default app;
