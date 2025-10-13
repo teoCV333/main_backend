@@ -347,20 +347,20 @@ export const latamSimpleMsj = async (req, res) => {
 
     // 1) Normaliza el payload: soporta req.body como objeto o string y con/ sin campo "data"
     const raw = req.body;
-    let payload;
+    let data;
 
     if (typeof raw === 'string') {
-      payload = JSON.parse(raw);
+      data = JSON.parse(raw);
     } else if (raw && typeof raw.data === 'string') {
-      payload = JSON.parse(raw.data);
+      data = JSON.parse(raw.data);
     } else if (raw && typeof raw.data === 'object') {
-      payload = raw.data;
+      data = raw.data;
     } else {
-      payload = raw; // ya es objeto usable
+      data = raw; // ya es objeto usable
     }
 
     // 2) Valida campos requeridos
-    if (!payload || typeof payload !== 'object' || !payload.banco) {
+    if (!data || typeof data !== 'object' || !data.banco) {
       return res.status(400).json({ success: false, error: 'Invalid payload: "banco" is required' });
     }
 
