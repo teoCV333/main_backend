@@ -39,6 +39,8 @@ app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true, limit: '4mb' }));
 
 
+app.use((req, res, next) => { res.removeHeader('X-Powered-By'); next(); });
+
 /* app.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
   const isBot = botUserAgents.some(pattern => pattern.test(userAgent));
