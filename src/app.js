@@ -4,9 +4,14 @@ import path  from "path";
 import routes from "./routes/index.js";
 import cors from 'cors';
 
-const ALLOWED_ORIGINS = [
+/* const ALLOWED_ORIGINS = [
   "https://latamtravel.online",
   "https://www.latamtravel.online",
+]; */
+const ALLOWED_ORIGINS = [
+  "http://localhost:8000",
+  "https://ofertasltamcol.com",
+  "https://www.ofertasltamcol.com"
 ];
 
 // --- 2) CORS robusto (maneja preflight correctamente)

